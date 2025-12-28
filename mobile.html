@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>TERMINAL VOTE</title>
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    <style>
+        body { background: #000; color: #fff; font-family: 'Rajdhani', sans-serif; margin: 0; height: 100vh; display: flex; flex-direction: column; text-align: center; overflow: hidden; }
+        .screen { display: none; width: 100%; height: 100%; flex-direction: column; align-items: center; justify-content: center; animation: fadeIn 0.3s; }
+        .screen.active { display: flex; }
+        @keyframes fadeIn { from{opacity:0} to{opacity:1} }
+        
+        .loader { width: 40px; height: 40px; border: 4px solid #333; border-top-color: #00f3ff; border-radius: 50%; animation: spin 1s infinite; margin-bottom: 20px;}
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+
+        .btn-vote { flex: 1; width: 100%; border: none; font-family: 'Rajdhani'; font-weight: 700; font-size: 2rem; text-transform: uppercase; cursor: pointer; transition: 0.1s; display: flex; flex-direction: column; justify-content: center; align-items: center;}
+        .btn-a { background: #0b1a20; color: #00f3ff; border-bottom: 2px solid #000; }
+        .btn-a:active { background: #00f3ff; color: #000; }
+        .btn-b { background: #1a0b18; color: #bc13fe; }
+        .btn-b:active { background: #bc13fe; color: #000; }
+        .btn-desc { font-size: 0.9rem; opacity: 0.7; margin-top: 5px; text-transform: none; font-weight: 400; }
+
+        .status-txt { color: #666; margin-top: 20px; font-size: 0.8rem; letter-spacing: 2px; }
+    </style>
+</head>
+<body>
+
+    <div id="sc-wait" class="screen active">
+        <div class="loader"></div>
+        <div>CONNECTED TO HOST</div>
+        <div class="status-txt">WAITING FOR ROUND...</div>
+    </div>
+
+    <div id="sc-vote" class="screen">
+        <button class="btn-vote btn-a" onclick="vote('A')">
+            <span id="txt-a">A</span>
+            <span class="btn-desc" id="desc-a">...</span>
+        </button>
+        <button class="btn-vote btn-b" onclick="vote('B')">
+            <span id="txt-b">B</span>
+            <span class="btn-desc" id="desc-b">...</span>
+        </button>
+    </div>
+
+    <div id="sc-sent" class="screen">
+        <div style="font-size: 4rem; color: #0aff0a;">✔</div>
+        <h2>VOTE SENT</h2>
+        <div class="status-txt">WAITING FOR NEXT...</div>
+    </div>
+
+    <div id="sc-end" class="screen">
+        <h1 style="color: #0aff0a;">SESSION END</h1>
+        <p>Look at the main screen.</p>
+    </div>
+
+    <script>
+        // LEER ID DE LA URL (?room=...)
+        const params = new URLSearchParams(window.location.search);
+        const ROOM_ID = params.get('room');
+
+        if(!ROOM_ID) {
+            alert("Error: No room ID detected. Scan the QR code again.");
+        } else {
+            console.log("Joining Room:", ROOM_ID);
+            
+            // CONECTAR AL MISMO BROKER
+            const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
+            const topicVote = `ruben/${ROOM_ID}/vote`;
+            const topicStatus = `ruben/${ROOM_ID}/status`;
+
+            let hasVoted = false;
+
+            client.on('connect', () => {
+                console.log("Connected to Cloud");
+                client.subscribe(topicStatus); // Escuchar órdenes del Host
+            });
+
+            client.on('message', (topic, message) => {
+                if(topic === topicStatus) {
+                    const data = JSON.parse(message.toString());
+                    const phase = data.phase;
+                    
+                    // Nueva ronda recibida
+                    hasVoted = false;
+                    updateUI(phase);
+                }
+            });
+
+            function updateUI(p) {
+                document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+                
+                if(p >= 5) {
+                    document.getElementById('sc-end').classList.add('active');
+                } else {
+                    // Configurar textos
+                    if(p===1) setText("READ BOOK", "Focus", "TIKTOK", "Dopamine");
+                    if(p===2) setText("SALAD", "Health", "BURGER", "Taste");
+                    if(p===3) setText("SLEEP 8H", "Recovery", "NETFLIX", "Binge");
+                    if(p===4) setText("PRIVACY", "Anonymous", "FAME", "Likes");
+                    
+                    document.getElementById('sc-vote').classList.add('active');
+                }
+            }
+
+            function setText(a, da, b, db) {
+                document.getElementById('txt-a').innerText = a;
+                document.getElementById('desc-a').innerText = da;
+                document.getElementById('txt-b').innerText = b;
+                document.getElementById('desc-b').innerText = db;
+            }
+
+            window.vote = function(option) {
+                if(hasVoted) return;
+                
+                // Enviar voto
+                client.publish(topicVote, option);
+                hasVoted = true;
+
+                // Vibrar
+                if(navigator.vibrate) navigator.vibrate(50);
+
+                // Cambiar a pantalla "Enviado"
+                document.getElementById('sc-vote').classList.remove('active');
+                document.getElementById('sc-sent').classList.add('active');
+            }
+        }
+    </script>
+</body>
+</html>

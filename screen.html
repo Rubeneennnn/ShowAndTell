@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>CORE SYSTEM // HOST</title>
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@300;500;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+
+    <style>
+        :root { --bg-dark: #050510; --neon-blue: #00f3ff; --neon-pink: #bc13fe; --neon-green: #0aff0a; --glass: rgba(255, 255, 255, 0.05); }
+        body { background-color: var(--bg-dark); color: #fff; font-family: 'Rajdhani', sans-serif; margin: 0; height: 100vh; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; user-select: none; }
+        
+        /* BACKGROUND */
+        .grid-bg { position: absolute; width: 200%; height: 200%; background-image: linear-gradient(var(--glass) 1px, transparent 1px), linear-gradient(90deg, var(--glass) 1px, transparent 1px); background-size: 60px 60px; transform: perspective(600px) rotateX(60deg) translateY(-100px) translateZ(-200px); animation: moveGrid 30s linear infinite; z-index: -1; opacity: 0.4; }
+        @keyframes moveGrid { 0% { transform: perspective(600px) rotateX(60deg) translateY(0) translateZ(-200px); } 100% { transform: perspective(600px) rotateX(60deg) translateY(60px) translateZ(-200px); } }
+
+        section { display: none; width: 100%; height: 100%; flex-direction: column; align-items: center; justify-content: center; animation: fadeUp 0.5s ease-out; }
+        section.active { display: flex; }
+        @keyframes fadeUp { from { opacity:0; transform: translateY(20px); } to { opacity:1; transform: translateY(0); } }
+
+        /* IDLE VIEW & QR */
+        .title-huge { font-size: 4rem; letter-spacing: 10px; text-shadow: 0 0 30px var(--neon-blue); margin: 0; text-transform: uppercase;}
+        #qr-container { background: #fff; padding: 15px; border-radius: 10px; margin-top: 30px; box-shadow: 0 0 50px var(--neon-blue); }
+        .url-link { margin-top: 20px; font-size: 1.2rem; color: #888; font-family: monospace; }
+
+        /* GAME UI */
+        .game-header { position: absolute; top: 10%; text-align: center; }
+        .question-title { font-size: 3.5rem; margin: 10px 0; text-transform: uppercase; text-shadow: 0 0 15px rgba(255,255,255,0.3); }
+        .bar-container { width: 80%; height: 80px; background: #111; border: 1px solid #333; border-radius: 40px; position: relative; overflow: hidden; box-shadow: 0 0 50px rgba(0,0,0,0.8); }
+        .bar-fill { height: 100%; width: 50%; background: linear-gradient(90deg, var(--neon-blue), #fff, var(--neon-pink)); position: absolute; left: 0; transition: width 0.5s ease; }
+        .vs-circle { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 60px; height: 60px; background: #000; border: 2px solid #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; z-index: 10; font-size: 1.2rem; }
+        .labels-row { display: flex; justify-content: space-between; width: 80%; margin-top: 20px; font-size: 2rem; font-weight: 700; text-transform: uppercase; }
+        .lbl-a { color: var(--neon-blue); } .lbl-b { color: var(--neon-pink); }
+        
+        /* STATS */
+        .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; width: 70%; margin-top: 30px; }
+        .stat-card { background: rgba(255,255,255,0.05); padding: 20px; border-left: 4px solid var(--neon-green); border-radius: 5px; }
+        .stat-val { font-size: 3rem; font-weight: 700; color: #fff; }
+
+        .master-btn { position: fixed; bottom: 30px; right: 30px; background: transparent; border: 2px solid var(--neon-blue); color: var(--neon-blue); padding: 15px 40px; font-size: 1.5rem; font-weight: 700; cursor: pointer; transition: all 0.3s; z-index: 100; font-family: 'Rajdhani'; }
+        .master-btn:hover { background: var(--neon-blue); color: #000; box-shadow: 0 0 30px var(--neon-blue); }
+        .connection-status { position: fixed; top: 20px; right: 20px; color: #666; font-size: 0.8rem; }
+        .active-conn { color: #0aff0a; text-shadow: 0 0 10px #0aff0a; }
+    </style>
+</head>
+<body>
+    <div class="grid-bg"></div>
+    <div class="connection-status" id="conn-status">SYSTEM OFFLINE</div>
+
+    <section id="view-0" class="active">
+        <h1 class="title-huge">JOIN SESSION</h1>
+        <div id="qr-container"></div> <div class="url-link" id="url-text">Loading...</div>
+        <p style="margin-top:20px; color:#aaa;">Scan with mobile to connect</p>
+    </section>
+
+    <section id="view-game">
+        <div class="game-header">
+            <div style="color:var(--neon-blue); letter-spacing:3px;">LIVE FEED</div>
+            <div class="question-title" id="round-title">LOADING</div>
+        </div>
+        <div class="labels-row"><span class="lbl-a" id="lbl-a">A</span><span class="lbl-b" id="lbl-b">B</span></div>
+        <div class="bar-container">
+            <div class="vs-circle">VS</div>
+            <div class="bar-fill" id="main-bar"></div>
+        </div>
+        <div class="labels-row" style="font-size:1.5rem;"><span class="lbl-a" id="pct-a">50%</span><span class="lbl-b" id="pct-b">50%</span></div>
+        <div style="margin-top:10px; color:#666;">VOTES: <span id="vote-count">0</span></div>
+    </section>
+
+    <section id="view-stats">
+        <h1 class="title-huge" style="color:var(--neon-green)">REPORT</h1>
+        <div class="stats-grid">
+            <div class="stat-card"><div class="stat-val" id="stat-total">0</div><div>Total Votes</div></div>
+            <div class="stat-card"><div class="stat-val" id="stat-winner">-</div><div>Dominant</div></div>
+        </div>
+    </section>
+
+    <button class="master-btn" onclick="nextPhase()" id="btn-next">START GAME</button>
+
+    <script>
+        // --- 1. SETUP ---
+        // Generamos un ID único para esta sesión para que no se mezcle con nadie más
+        const ROOM_ID = "game_" + Math.floor(Math.random() * 100000);
+        console.log("Session ID:", ROOM_ID);
+
+        // Generar URL para el móvil (asume que mobile.html está en la misma carpeta)
+        // REEMPLAZA 'screen.html' por 'mobile.html' en la URL actual y añade el ID
+        const currentUrl = window.location.href;
+        const mobileUrl = currentUrl.substring(0, currentUrl.lastIndexOf("/")) + "/mobile.html?room=" + ROOM_ID;
+        
+        document.getElementById('url-text').innerText = mobileUrl; // Debug visual
+        
+        // Generar QR
+        new QRCode(document.getElementById("qr-container"), {
+            text: mobileUrl,
+            width: 256, height: 256,
+            colorDark : "#000000", colorLight : "#ffffff",
+            correctLevel : QRCode.CorrectLevel.H
+        });
+
+        // --- 2. MQTT CONNECTION (Sin base de datos) ---
+        // Usamos un broker público estable (EMQX)
+        const client = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
+        const topicVote = `ruben/${ROOM_ID}/vote`;
+        const topicStatus = `ruben/${ROOM_ID}/status`;
+
+        // Datos del juego
+        let votes = { A: 0, B: 0 };
+        let allRoundVotes = {1:{A:0,B:0}, 2:{A:0,B:0}, 3:{A:0,B:0}, 4:{A:0,B:0}};
+        let currentPhase = 0;
+
+        client.on('connect', () => {
+            document.getElementById('conn-status').innerText = "SYSTEM ONLINE // " + ROOM_ID;
+            document.getElementById('conn-status').classList.add('active-conn');
+            client.subscribe(topicVote); // Escuchar votos
+        });
+
+        client.on('message', (topic, message) => {
+            if(topic === topicVote && currentPhase > 0 && currentPhase < 5) {
+                const vote = message.toString(); // "A" o "B"
+                if(vote === 'A') { votes.A++; allRoundVotes[currentPhase].A++; }
+                if(vote === 'B') { votes.B++; allRoundVotes[currentPhase].B++; }
+                updateDisplay();
+            }
+        });
+
+        // --- 3. LOGIC ---
+        function nextPhase() {
+            currentPhase++;
+            votes = { A: 0, B: 0 }; // Reset local votes for new round
+            updateDisplay();
+
+            // Enviar señal a los móviles para que cambien de pantalla
+            client.publish(topicStatus, JSON.stringify({ phase: currentPhase }));
+
+            // UI Screen Update
+            document.querySelectorAll('section').forEach(s => s.classList.remove('active'));
+            const btn = document.getElementById('btn-next');
+
+            if(currentPhase <= 4) {
+                document.getElementById('view-game').classList.add('active');
+                setupRoundText(currentPhase);
+                btn.innerText = (currentPhase === 4) ? "FINISH" : "NEXT ROUND";
+            } else {
+                document.getElementById('view-stats').classList.add('active');
+                btn.style.display = 'none';
+                calcStats();
+            }
+        }
+
+        function setupRoundText(r) {
+            let t, a, b;
+            if(r===1) { t="ATTENTION"; a="READ BOOK"; b="TIKTOK"; }
+            else if(r===2) { t="CRAVING"; a="SALAD"; b="BURGER"; }
+            else if(r===3) { t="DISCIPLINE"; a="SLEEP 8H"; b="NETFLIX"; }
+            else if(r===4) { t="VALIDATION"; a="PRIVACY"; b="FAME"; }
+            
+            document.getElementById('round-title').innerText = t;
+            document.getElementById('lbl-a').innerText = a;
+            document.getElementById('lbl-b').innerText = b;
+            updateDisplay(); // Reset bars
+        }
+
+        function updateDisplay() {
+            const total = votes.A + votes.B;
+            document.getElementById('vote-count').innerText = total;
+            
+            let pctA = 50;
+            if(total > 0) pctA = (votes.A / total) * 100;
+            
+            document.getElementById('main-bar').style.width = pctA + "%";
+            document.getElementById('pct-a').innerText = Math.round(pctA) + "%";
+            document.getElementById('pct-b').innerText = Math.round(100 - pctA) + "%";
+        }
+
+        function calcStats() {
+            let totalV = 0;
+            let dopaScore = 0; // Opcion B es dopamina
+            for(let r=1; r<=4; r++) {
+                totalV += (allRoundVotes[r].A + allRoundVotes[r].B);
+                dopaScore += allRoundVotes[r].B;
+            }
+            document.getElementById('stat-total').innerText = totalV;
+            const winner = (totalV > 0 && (dopaScore/totalV) > 0.5) ? "INSTANT GRATIFICATION" : "SELF CONTROL";
+            document.getElementById('stat-winner').innerText = winner;
+            document.getElementById('stat-winner').style.color = winner.includes("INSTANT") ? "var(--neon-pink)" : "var(--neon-blue)";
+        }
+    </script>
+</body>
+</html>
